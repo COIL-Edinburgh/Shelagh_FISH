@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+		 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		 xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+		http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<parent>
+		<groupId>org.scijava</groupId>
+		<artifactId>pom-scijava</artifactId>
+		<version>34.1.0</version>
+		<relativePath />
+	</parent>
+
+	<groupId>bio.coil</groupId>
+	<artifactId>Thom_Titans</artifactId>
+	<version>1.0.1</version>
+
+	<name>Thom Titans</name>
+	<description>A project to find and measure the area and axes lengths of yeast? cells</description>
+	<url>https://www.ed.ac.uk/biology/wcb/centre-optical-instrumentation-laboratory-coil</url>
+	<inceptionYear>2023</inceptionYear>
+	<organization>
+		<name>University of Edinburgh</name>
+		<url>https://ed.ac.uk</url>
+	</organization>
+	<licenses>
+		<license>
+			<name>CC0</name>
+			<url>https://creativecommons.org/publicdomain/zero/1.0/</url>
+			<distribution>repo</distribution>
+		</license>
+	</licenses>
+
+	<developers>
+		<!-- See https://imagej.net/Team -->
+		<developer>
+			<id>CoilEdinburgh</id>
+			<name>Toni McHugh</name>
+			<url>https://www.ed.ac.uk/biology/wcb/centre-optical-instrumentation-laboratory-coil</url>
+			<roles>
+				<role>founder</role>
+				<role>lead</role>
+				<role>developer</role>
+				<role>debugger</role>
+				<role>reviewer</role>
+				<role>support</role>
+				<role>maintainer</role>
+			</roles>
+		</developer>
+	</developers>
+	<contributors>
+		<contributor>
+			<name>Dave Kelly</name>
+		</contributor>
+	</contributors>
+
+	<mailingLists>
+		<mailingList>
+			<name>Image.sc Forum</name>
+			<archive>https://forum.image.sc/tag/imagej</archive>
+		</mailingList>
+	</mailingLists>
+
+	<scm>
+		<connection>scm:git:https://github.com/CoilEdinburgh/Thom_Titans</connection>
+		<developerConnection>scm:git:git@github.com:CoilEdinburgh/Thom_Titans</developerConnection>
+		<tag>HEAD</tag>
+		<url>https://github.com/CoilEdinburgh/Thom_Titans</url>
+	</scm>
+	<issueManagement>
+		<system>GitHub Issues</system>
+		<url>https://github.com/CoilEdinburgh/Thom_Titans/issues</url>
+	</issueManagement>
+	<ciManagement>
+		<system>None</system>
+	</ciManagement>
+
+	<properties>
+		<package-name>bio.coil.CoilEdinburgh.Thom_Titans</package-name>
+		<main-class>Thom_Titans</main-class>
+		<license.licenseName>cc0</license.licenseName>
+		<license.copyrightOwners>University of Edinburgh</license.copyrightOwners>
+	</properties>
+
+	<repositories>
+		<repository>
+			<id>scijava.public</id>
+			<url>https://maven.scijava.org/content/groups/public</url>
+		</repository>
+	</repositories>
+
+	<dependencies>
+
+<!--		<dependency>-->
+<!--			<groupId>com.mylib</groupId>-->
+<!--			<artifactId>mylib-core</artifactId>-->
+<!--			<version>0.0.1</version>-->
+<!--		</dependency>-->
+
+		<dependency>
+			<groupId>net.imagej</groupId>
+			<artifactId>imagej</artifactId>
+		</dependency>
+		<!-- User-facing commands -->
+		<dependency>
+			<groupId>net.imagej</groupId>
+			<artifactId>imagej-plugins-commands</artifactId>
+		</dependency>
+		<!-- Run graphically with the classic ImageJ user interface -->
+		<dependency>
+			<groupId>net.imagej</groupId>
+			<artifactId>imagej-legacy</artifactId>
+		</dependency>
+		<!-- Include all Fiji plugins when running -->
+		<dependency>
+			<groupId>sc.fiji</groupId>
+			<artifactId>fiji</artifactId>
+		</dependency>
+		<!-- https://mvnrepository.com/artifact/ome/bio-formats_plugins -->
+		<dependency>
+			<groupId>ome</groupId>
+			<artifactId>bio-formats_plugins</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>io.scif</groupId>
+			<artifactId>scifio</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>io.scif</groupId>
+			<artifactId>scifio-bf-compat</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>ome</groupId>
+			<artifactId>formats-gpl</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>sc.fiji</groupId>
+			<artifactId>KymographBuilder</artifactId>
+		</dependency>
+
+		<!-- https://mvnrepository.com/artifact/sc.fiji/TurboReg_ -->
+		<dependency>
+			<groupId>sc.fiji</groupId>
+			<artifactId>TurboReg_</artifactId>
+			<version>2.0.0</version>
+		</dependency>
+
+		<!-- https://mvnrepository.com/artifact/sc.fiji/TransformJ_ -->
+		<dependency>
+			<groupId>sc.fiji</groupId>
+			<artifactId>TransformJ_</artifactId>
+			<version>4.0.0</version>
+		</dependency>
+
+		<!-- https://mvnrepository.com/artifact/ch.epfl.biop/ijl-utilities-wrappers -->
+		<dependency>
+			<groupId>ch.epfl.biop</groupId>
+			<artifactId>ijl-utilities-wrappers</artifactId>
+			<version>0.7.10</version>
+		</dependency>
+
+
+	</dependencies>
+
+</project>
+

@@ -13,11 +13,11 @@
 	</parent>
 
 	<groupId>bio.coil</groupId>
-	<artifactId>Thom_Titans</artifactId>
+	<artifactId>Shelagh_FISH</artifactId>
 	<version>1.0.1</version>
 
-	<name>Thom Titans</name>
-	<description>A project to find and measure the area and axes lengths of yeast? cells</description>
+	<name>Shelagh FISH</name>
+	<description>A project to find the distance of a FISH signal from the edge of the nucleus</description>
 	<url>https://www.ed.ac.uk/biology/wcb/centre-optical-instrumentation-laboratory-coil</url>
 	<inceptionYear>2023</inceptionYear>
 	<organization>
@@ -63,22 +63,22 @@
 	</mailingLists>
 
 	<scm>
-		<connection>scm:git:https://github.com/CoilEdinburgh/Thom_Titans</connection>
-		<developerConnection>scm:git:git@github.com:CoilEdinburgh/Thom_Titans</developerConnection>
+		<connection>scm:git:https://github.com/CoilEdinburgh/Shelagh_FISH</connection>
+		<developerConnection>scm:git:git@github.com:CoilEdinburgh/Shelagh_FISH</developerConnection>
 		<tag>HEAD</tag>
-		<url>https://github.com/CoilEdinburgh/Thom_Titans</url>
+		<url>https://github.com/CoilEdinburgh/Shelagh_FISH</url>
 	</scm>
 	<issueManagement>
 		<system>GitHub Issues</system>
-		<url>https://github.com/CoilEdinburgh/Thom_Titans/issues</url>
+		<url>https://github.com/CoilEdinburgh/Shelagh_FISH/issues</url>
 	</issueManagement>
 	<ciManagement>
 		<system>None</system>
 	</ciManagement>
 
 	<properties>
-		<package-name>bio.coil.CoilEdinburgh.Thom_Titans</package-name>
-		<main-class>Thom_Titans</main-class>
+		<package-name>bio.coil.CoilEdinburgh.Shelagh_FISH</package-name>
+		<main-class>Shelagh_FISH</main-class>
 		<license.licenseName>cc0</license.licenseName>
 		<license.copyrightOwners>University of Edinburgh</license.copyrightOwners>
 	</properties>

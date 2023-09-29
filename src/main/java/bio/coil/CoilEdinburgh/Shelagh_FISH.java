@@ -15,6 +15,7 @@ import ij.gui.Line;
 import ij.gui.PointRoi;
 import ij.gui.Roi;
 import ij.plugin.ChannelSplitter;
+import ij.plugin.Concatenator;
 import ij.plugin.ZProjector;
 import ij.plugin.filter.MaximumFinder;
 import ij.plugin.frame.RoiManager;
@@ -113,34 +114,42 @@ public class Shelagh_FISH<T extends RealType<T>> implements Command {
         pixelDepth = impDAPI.getCalibration().pixelDepth;
 
         double[][] xyGreen = findXYpositions(impFISH,"Green", tolerance);
-        double[][] xyzGreen = findZPositions(impFISH, xyGreen);
+        double[][] xyzGreen = findZPositions(impFISH, impDAPI, xyGreen);
 
         Roi[] cellOutlines = findCellOutlines(impDAPI);
         double[][] xyzCellGreen = whichCell(xyzGreen,cellOutlines);
 
         Roi[][] cell3D = get3DCellROIs(cellOutlines, impDAPI);
 
-        ArrayList<Double> output = new ArrayList<>();
-
         double[][] distances = findDistance(xyzCellGreen,cell3D, cellOutlines);
         makeSlices(impFISH, impDAPI, distances, xyzCellGreen);
+
         projDAPI.setTitle("DAPI_proj");
+
         ImagePlus projFISH = ZProjector.run(impFISH, "max");
         projFISH.show();
         projFISH.setTitle("projFISH");
+
         IJ.run("Merge Channels...", "c2=[projFISH] c4=[DAPI_proj] create");
         ImagePlus xyOutput = WindowManager.getCurrentImage();
-        xyOutput.setTitle("XY_Overview");
-        impFISH.close();
-        impDAPI.close();
-        projDAPI.close();
-        projFISH.close();
-        String CreateName = Paths.get( newDirectory,xyOutput.getShortTitle()).toString();
+        xyOutput.setTitle("xyOutput");
+
+        IJ.run("Merge Channels...", "c2=[FISH] c4=[DAPI] create");
+        ImagePlus xyzOutlines = WindowManager.getCurrentImage();
+        xyzOutlines.setTitle("xyzOutlines");
+
+        String Name = Paths.get( newDirectory,"XYZ_CellOutlines").toString();
+        IJ.saveAs(xyzOutlines, "Tiff", Name);
+        String CreateName = Paths.get( newDirectory,"XY_Overview").toString();
         IJ.saveAs(xyOutput, "Tiff", CreateName);
-        makeResultsFile(xyzCellGreen, distances);
+
+        makeResultsFile(xyzCellGreen,xyzGreen, distances, cellOutlines);
+
+        IJ.run("Close All", " ");
+        roiManager.close();
     }
 
-    private void makeResultsFile( double[][] xyzCell, double[][] distances){
+    private void makeResultsFile( double[][] xyzCell, double[][] xyzInt, double[][] distances, Roi cells[]){
 
         String CreateName = Paths.get( newDirectory , "Distances.csv").toString();
         File resultsFile = new File(CreateName);
@@ -157,15 +166,17 @@ public class Shelagh_FISH<T extends RealType<T>> implements Command {
             FileWriter fileWriter = new FileWriter(CreateName,true);
             BufferedWriter bufferedWriter = new BufferedWriter(fileWriter);
             bufferedWriter.newLine();
-            bufferedWriter.write("File= " + file.getName());
+            bufferedWriter.write("File= ," + file.getName());
             bufferedWriter.newLine();
             bufferedWriter.write("Green Threshold:, " + tolerance );
             bufferedWriter.newLine();
-            bufferedWriter.write("Spot, Cell, Distance");
+            bufferedWriter.write("Spot, Cell, Cell Width(x), Cell Height(y), Distance, Intensity DAPI, Intensity Green ");
             bufferedWriter.newLine();
             for(int j=0; j<distances.length;j++) {
                 if (distances[j][1]!=0) {
-                    bufferedWriter.write( j + ","+xyzCell[j][3]+ ","+ distances[j][7]);
+                    double xBounds = cells[(int)xyzCell[j][3]-1].getStatistics().roiWidth*pixelWidth;
+                    double yBounds = cells[(int)xyzCell[j][3]-1].getStatistics().roiHeight*pixelHeight;
+                    bufferedWriter.write( j + ","+xyzCell[j][3]+ "," + xBounds + ","+ yBounds +","+ distances[j][7]+","+ xyzInt[j][4]+","+xyzInt[j][3]);
                     bufferedWriter.newLine();
                 }
             }
@@ -175,6 +186,7 @@ public class Shelagh_FISH<T extends RealType<T>> implements Command {
             System.out.println(
                     "Error writing to file '" + CreateName + "'");
         }
+        IJ.log("Finished");
     }
 
     private void makeSlices(ImagePlus impFISH, ImagePlus impDAPI, double[][] distances, double[][] xyzSpot){
@@ -182,7 +194,8 @@ public class Shelagh_FISH<T extends RealType<T>> implements Command {
         impFISH.setTitle("FISH");
         impFISH.show();
         impDAPI.setTitle("DAPI");
-
+        int count = 1;
+        ImagePlus reslices = new ImagePlus();
         for (int i = 0; i< distances.length; i++ ){
             if(distances[i][0]!=0){
                 Line lineScan = new Line(distances[i][0],distances[i][1],distances[i][2],distances[i][3]);
@@ -198,9 +211,16 @@ public class Shelagh_FISH<T extends RealType<T>> implements Command {
                 impFishSlice.setTitle("FISH_Slice");
                 IJ.run(impFishSlice, "Enhance Contrast", "saturated=0.35");
                 IJ.run("Merge Channels...", "c2=[FISH_Slice] c4=[DAPI_Slice] create");
-                ImagePlus mergedSlice = WindowManager.getCurrentImage();
-                String CreateName = Paths.get( newDirectory,i+"_Z_slice").toString();
-                IJ.saveAs(mergedSlice, "Tiff", CreateName);
+                ImagePlus reslice = WindowManager.getCurrentImage();
+                reslice.setTitle("Reslice "+count);
+                if(count==1){
+                    reslices = reslice;
+                }else{
+                    reslices = Concatenator.run(reslices,reslice);
+                }
+                count++;
+                String CreateName = Paths.get( newDirectory, "Z_slices").toString();
+                IJ.saveAs(reslices, "Tiff", CreateName);
             }
         }
     }
@@ -216,7 +236,7 @@ public class Shelagh_FISH<T extends RealType<T>> implements Command {
         ip.setFont(font);
         ip.setColor(Color.white);
         String number = df.format(distances[7])+" \u00B5m" ;
-        String spotNumber = String.valueOf(i);
+        String spotNumber = "Spot: "+ i;
         double delta_x = distances[0]-distances[4];
         double delta_y = distances[1]-distances[5];
         double delta_Spotx = distances[0]-spot[0];
@@ -252,10 +272,11 @@ public class Shelagh_FISH<T extends RealType<T>> implements Command {
         return xy;
     }
 
-    private double[][] findZPositions(ImagePlus channel, double[][] xyPositions) {
+    private double[][] findZPositions(ImagePlus channel, ImagePlus DAPI, double[][] xyPositions) {
 
-        double[][] zPositions = new double[xyPositions.length][3];
-
+        double[][] zPositions = new double[xyPositions.length][5];
+        ImagePlus dapi = DAPI.duplicate();
+        dapi.show();
         for (int i = 0; i < xyPositions.length; i++) {
             double maxIntensity = 0;
             zPositions[i][0] = xyPositions[i][0];
@@ -268,6 +289,10 @@ public class Shelagh_FISH<T extends RealType<T>> implements Command {
                 if (intensity > maxIntensity) {
                     maxIntensity = intensity;
                     zPositions[i][2] = j;
+                    zPositions[i][3] = maxIntensity;
+                    dapi.setSlice(j);
+                    dapi.setRoi(point);
+                    zPositions[i][4] = dapi.getStatistics().max;
                 }
 
             }
@@ -323,10 +348,11 @@ public class Shelagh_FISH<T extends RealType<T>> implements Command {
     private Roi[][] get3DCellROIs(Roi[] outlines, ImagePlus imp){
 
         imp.show();
+        imp.setZ(0);
         IJ.run(imp, "Subtract Background...", "rolling=150 stack");
         imp.setDisplayMode(IJ.GRAYSCALE);
         ImageProcessor ip = imp.getProcessor();
-        imp.setZ(0);
+
         IJ.setAutoThreshold(imp, "Yen dark no-reset");
         Roi[][] outputCells = new Roi[outlines.length][imp.getNSlices()];
         //for each outline,
@@ -348,7 +374,7 @@ public class Shelagh_FISH<T extends RealType<T>> implements Command {
                 } else {
                     output = new PointRoi(outlines[i].getContourCentroid()[0], outlines[i].getContourCentroid()[1]);
                 }
-                drawRoi(output,imp,j);
+                drawRoi(output,imp,j,i,(int)outlines[i].getContourCentroid()[0],(int)outlines[i].getContourCentroid()[1]);
                 outputCells[i][j] = output;
                 roiManager.reset();
             }
@@ -456,13 +482,14 @@ public class Shelagh_FISH<T extends RealType<T>> implements Command {
         return output;
     }
 
-    private void drawRoi(Roi roi, ImagePlus imp, int zslice){
+    private void drawRoi(Roi roi, ImagePlus imp, int zslice, int cell, int xpos, int ypos){
         IJ.setForegroundColor(255, 255, 255);
         ImageProcessor ip = imp.getProcessor();
         ip.setSliceNumber(zslice);
-        Font font = new Font("SansSerif", Font.BOLD, 10);
+        Font font = new Font("SansSerif", Font.BOLD, 14);
         ip.setFont(font);
         ip.setColor(Color.white);
+        ip.drawString(String.valueOf(cell), xpos, ypos);
         ip.draw(roi);
         imp.updateAndDraw();
     }

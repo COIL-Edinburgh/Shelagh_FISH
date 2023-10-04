@@ -120,6 +120,7 @@ public class Shelagh_FISH<T extends RealType<T>> implements Command {
         double[][] xyzCellGreen = whichCell(xyzGreen,cellOutlines);
 
         Roi[][] cell3D = get3DCellROIs(cellOutlines, impDAPI);
+        double[][] DapiStats = get3DCellStats(cell3D, impDAPI);
 
         double[][] distances = findDistance(xyzCellGreen,cell3D, cellOutlines);
         makeSlices(impFISH, impDAPI, distances, xyzCellGreen);
@@ -143,13 +144,59 @@ public class Shelagh_FISH<T extends RealType<T>> implements Command {
         String CreateName = Paths.get( newDirectory,"XY_Overview").toString();
         IJ.saveAs(xyOutput, "Tiff", CreateName);
 
-        makeResultsFile(xyzCellGreen,xyzGreen, distances, cellOutlines);
+        makeResultsFile(xyzCellGreen,xyzGreen, distances, cellOutlines, DapiStats);
 
         IJ.run("Close All", " ");
         roiManager.close();
     }
 
-    private void makeResultsFile( double[][] xyzCell, double[][] xyzInt, double[][] distances, Roi cells[]){
+    private double[][] get3DCellStats(Roi[][] cells, ImagePlus imp){
+        double[][] results = new double[cells.length][4];
+        ImageProcessor ip = imp.getProcessor();
+        for(int i = 0 ; i< cells.length; i++){
+            double cellMax = 0;
+            double cellMin = Double.MAX_VALUE;
+            double cellMean = 0;
+            double cellArea = 0;
+            double cellMedian = 0;
+            TreeMap<Integer, Double> median = new TreeMap();
+            Integer counter = 0;
+            for (int j = 0; j< cells[i].length; j++){
+                if(cells[i][j].getType()==4) {
+                    ip.setSliceNumber(j);
+                    ip.setRoi(cells[i][j]);
+                    double max = ip.getStatistics().max;
+                    double min = ip.getStatistics().min;
+                    double mean = ip.getStatistics().mean;
+                    Point[] pixels = cells[i][j].getContainedPoints();
+                    for (Point pixel:pixels) {
+                            Double pixelvalue = ip.getValue(pixel.x,pixel.y);
+                            median.put(counter, pixelvalue);
+                        counter++;
+                    }
+                    double area = ip.getStatistics().area;
+
+                    if(max>cellMax){cellMax=max;}
+                    if(min<cellMin){cellMin=min;}
+                    cellMean = cellMean + mean*area;
+                    cellArea = cellArea + area;
+
+                }
+            }
+            if(counter!=0) {
+                cellMedian = median.descendingMap().get(median.lastKey() / 2);
+            }
+            cellMean = cellMean/cellArea;
+            results[i][0] = cellMax;
+            results[i][1] = cellMin;
+            results[i][2] = cellMean;
+            results[i][3] = cellMedian;
+
+        }
+        return results;
+    }
+
+    private void makeResultsFile(double[][] xyzCell, double[][] xyzInt, double[][] distances, Roi[] cells, double[][] DapiStats){
 
         String CreateName = Paths.get( newDirectory , "Distances.csv").toString();
         File resultsFile = new File(CreateName);
@@ -170,13 +217,17 @@ public class Shelagh_FISH<T extends RealType<T>> implements Command {
             bufferedWriter.newLine();
             bufferedWriter.write("Green Threshold:, " + tolerance );
             bufferedWriter.newLine();
-            bufferedWriter.write("Spot, Cell, Cell Width(x), Cell Height(y), Distance, Intensity DAPI, Intensity Green ");
+            bufferedWriter.write("Spot, Cell, Cell Width(x), Cell Height(y), Distance, Spot Intensity DAPI, Spot Intensity Green, " +
+                    "Cell Max DAPI, Cell Min DAPI, Cell Mean DAPI, Cell Median DAPI");
             bufferedWriter.newLine();
             for(int j=0; j<distances.length;j++) {
                 if (distances[j][1]!=0) {
-                    double xBounds = cells[(int)xyzCell[j][3]-1].getStatistics().roiWidth*pixelWidth;
-                    double yBounds = cells[(int)xyzCell[j][3]-1].getStatistics().roiHeight*pixelHeight;
-                    bufferedWriter.write( j + ","+xyzCell[j][3]+ "," + xBounds + ","+ yBounds +","+ distances[j][7]+","+ xyzInt[j][4]+","+xyzInt[j][3]);
+                    int cellNum = (int)xyzCell[j][3]-1;
+                    double xBounds = cells[cellNum].getStatistics().roiWidth*pixelWidth;
+                    double yBounds = cells[cellNum].getStatistics().roiHeight*pixelHeight;
+                    bufferedWriter.write( j + ","+xyzCell[j][3]+ "," + xBounds + ","+ yBounds +","+ distances[j][7]+
+                            ","+ xyzInt[j][4]+","+xyzInt[j][3]+","+DapiStats[cellNum][0]+","+DapiStats[cellNum][1]+","+DapiStats[cellNum][2]
+                            +","+DapiStats[cellNum][3]);
                     bufferedWriter.newLine();
                 }
             }

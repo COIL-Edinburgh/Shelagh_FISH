@@ -16,25 +16,25 @@ import ij.gui.PointRoi;
 import ij.gui.Roi;
 import ij.plugin.ChannelSplitter;
 import ij.plugin.Concatenator;
+import ij.plugin.Duplicator;
 import ij.plugin.ZProjector;
 import ij.plugin.filter.MaximumFinder;
 import ij.plugin.frame.RoiManager;
 import ij.process.ImageProcessor;
 import ij.process.ImageStatistics;
-import io.scif.*;
 import io.scif.services.DatasetIOService;
 import io.scif.services.FormatService;
-import net.imagej.Dataset;
 import net.imagej.ImageJ;
 import net.imagej.ops.OpService;
 import net.imagej.roi.ROIService;
 import net.imglib2.IterableInterval;
+import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.img.Img;
 import net.imglib2.img.display.imagej.ImageJFunctions;
 import net.imglib2.roi.MaskInterval;
 import net.imglib2.type.numeric.RealType;
 import net.imglib2.view.Views;
-import org.apache.commons.io.FilenameUtils;
+import net.imglib2.Cursor;
 import org.scijava.command.Command;
 import org.scijava.plugin.Parameter;
 import org.scijava.plugin.Plugin;
@@ -48,9 +48,7 @@ import java.io.FileWriter;
 import java.math.RoundingMode;
 import java.nio.file.Paths;
 import java.text.DecimalFormat;
-import java.text.SimpleDateFormat;
 import java.util.*;
-import java.util.List;
 
 /**
  * This example illustrates how to create an ImageJ {@link Command} plugin.
@@ -97,6 +95,7 @@ public class Shelagh_FISH<T extends RealType<T>> implements Command {
     @Override
     public void run() {
 
+        //Open file and split channels
         roiManager = new RoiManager();
         IJ.open(file.toString());
         ImagePlus imp = WindowManager.getCurrentImage();
@@ -104,50 +103,87 @@ public class Shelagh_FISH<T extends RealType<T>> implements Command {
         ImagePlus impDAPI = channels[2];
         ImagePlus impFISH = channels[1];
 
+        //Create a new folder to save results
         String directory = file.getAbsolutePath();
         newDirectory = directory.substring(0, directory.lastIndexOf(".")) + "_Output";
         new File(newDirectory).mkdir();
 
+        //Get Scale
         IJ.run(imp, "Enhance Contrast", "saturated=0.35");
         pixelWidth = impDAPI.getCalibration().pixelWidth;
         pixelHeight = impDAPI.getCalibration().pixelHeight;
         pixelDepth = impDAPI.getCalibration().pixelDepth;
 
-        double[][] xyGreen = findXYpositions(impFISH,"Green", tolerance);
+        //Find XYZ positions of green maxima
+        double[][] xyGreen = findXYpositions(impFISH, tolerance);
         double[][] xyzGreen = findZPositions(impFISH, impDAPI, xyGreen);
 
+        //Find the XYZ Cell outlines and the intensity stats per cell in the DAPI channel
         Roi[] cellOutlines = findCellOutlines(impDAPI);
+        ImagePlus dapi = impDAPI.duplicate();
+        dapi.show();
+        Roi[][] cell3D = get3DCellROIs(cellOutlines, impDAPI);
+        double[][] DapiStats = get3DCellStats(cell3D, dapi);
+
+        //Find which cell each spot belongs to
         double[][] xyzCellGreen = whichCell(xyzGreen,cellOutlines);
 
-        Roi[][] cell3D = get3DCellROIs(cellOutlines, impDAPI);
-        double[][] DapiStats = get3DCellStats(cell3D, impDAPI);
-
+        //Find the distances of the spot to the nearest cell edge and the intensity at the spot in each channel
         double[][] distances = findDistance(xyzCellGreen,cell3D, cellOutlines);
+
+        //Make the Z-slice output image stack
         makeSlices(impFISH, impDAPI, distances, xyzCellGreen);
 
+        //Merge the DAPI (with distances drawn on) and FISH (green) channel Z-projections
         projDAPI.setTitle("DAPI_proj");
-
         ImagePlus projFISH = ZProjector.run(impFISH, "max");
         projFISH.show();
         projFISH.setTitle("projFISH");
-
         IJ.run("Merge Channels...", "c2=[projFISH] c4=[DAPI_proj] create");
         ImagePlus xyOutput = WindowManager.getCurrentImage();
         xyOutput.setTitle("xyOutput");
 
+        //Merge the DAPI (with cell outlines) and FISH Z-stacks
         IJ.run("Merge Channels...", "c2=[FISH] c4=[DAPI] create");
         ImagePlus xyzOutlines = WindowManager.getCurrentImage();
         xyzOutlines.setTitle("xyzOutlines");
 
+        //Save both the XY and XYZ merged overview images
         String Name = Paths.get( newDirectory,"XYZ_CellOutlines").toString();
         IJ.saveAs(xyzOutlines, "Tiff", Name);
         String CreateName = Paths.get( newDirectory,"XY_Overview").toString();
         IJ.saveAs(xyOutput, "Tiff", CreateName);
 
+        //Make the results file with distances and intensity data for each cell
         makeResultsFile(xyzCellGreen,xyzGreen, distances, cellOutlines, DapiStats);
 
+        //Close all Images and ROI manager
         IJ.run("Close All", " ");
         roiManager.close();
+    }
+
+    private ArrayList<Double> getPixelValues(Img<T> img, Roi roi, ArrayList<Double> pixelList){
+
+        //Initialize output variables and cursors
+        MaskInterval maskInterval = roiService.toMaskInterval(roi);
+        IterableInterval interval = Views.interval(img, maskInterval);
+        Cursor<T> cursor = interval.localizingCursor();
+
+        //Loop through the pixels in the mask
+        for(int k =0; k< interval.size(); k++){
+            int x = (int) cursor.positionAsDoubleArray()[0];
+            int y = (int) cursor.positionAsDoubleArray()[1];
+
+            //If the pixel is in the bounding ROI
+            if(roi.contains(x,y)) {
+                //If the value of a pixel in the background subtracted image is higher than the threshold it is positive
+                pixelList.add(cursor.get().getRealDouble());
+            }
+            //Move the cursors forwards
+            cursor.fwd();
+
+        }
+        return pixelList;
     }
 
     private double[][] get3DCellStats(Roi[][] cells, ImagePlus imp){
@@ -159,34 +195,39 @@ public class Shelagh_FISH<T extends RealType<T>> implements Command {
             double cellMean = 0;
             double cellArea = 0;
             double cellMedian = 0;
-            TreeMap<Integer, Double> median = new TreeMap();
+            ArrayList<Double> pixelList = new ArrayList<>();
             Integer counter = 0;
+            imp.show();
             for (int j = 0; j< cells[i].length; j++){
                 if(cells[i][j].getType()==4) {
                     ip.setSliceNumber(j);
                     ip.setRoi(cells[i][j]);
-                    double max = ip.getStatistics().max;
-                    double min = ip.getStatistics().min;
+//                    double max = ip.getStatistics().max;
+//                    double min = ip.getStatistics().min;
                     double mean = ip.getStatistics().mean;
-                    Point[] pixels = cells[i][j].getContainedPoints();
-                    for (Point pixel:pixels) {
-                            Double pixelvalue = ip.getValue(pixel.x,pixel.y);
-                            median.put(counter, pixelvalue);
-                        counter++;
-                    }
+                    ImagePlus slice = new Duplicator().run(imp, 1, 1, j, j, 1, 1);
+                    Img<T> img = ImageJFunctions.wrapReal(slice);
+                    pixelList = getPixelValues(img, cells[i][j],pixelList);
+//                    int minX = cells[i][j].getBounds().getMinX();
+//                    int maxX =
+//                    Point[] pixels = cells[i][j].getContainedPoints();
+//                    for (Point pixel:pixels) {
+//                        pixelList.add(ip.getValue(pixel.x,pixel.y));
+//                        counter++;
+//                    }
                     double area = ip.getStatistics().area;
-
-                    if(max>cellMax){cellMax=max;}
-                    if(min<cellMin){cellMin=min;}
                     cellMean = cellMean + mean*area;
                     cellArea = cellArea + area;
-
+                    counter++;
                 }
             }
             if(counter!=0) {
-                cellMedian = median.descendingMap().get(median.lastKey() / 2);
+                Collections.sort(pixelList);
+                cellMedian = pixelList.get( pixelList.size()/2);
+                cellMax = pixelList.get(pixelList.size()-1);
+                cellMin = pixelList.get(0);
+                cellMean = pixelList.stream().mapToDouble(Double::doubleValue).sum()/ pixelList.size();
             }
-            cellMean = cellMean/cellArea;
             results[i][0] = cellMax;
             results[i][1] = cellMin;
             results[i][2] = cellMean;
@@ -225,7 +266,7 @@ public class Shelagh_FISH<T extends RealType<T>> implements Command {
                     int cellNum = (int)xyzCell[j][3]-1;
                     double xBounds = cells[cellNum].getStatistics().roiWidth*pixelWidth;
                     double yBounds = cells[cellNum].getStatistics().roiHeight*pixelHeight;
-                    bufferedWriter.write( j + ","+xyzCell[j][3]+ "," + xBounds + ","+ yBounds +","+ distances[j][7]+
+                    bufferedWriter.write( j + ","+cellNum+ "," + xBounds + ","+ yBounds +","+ distances[j][7]+
                             ","+ xyzInt[j][4]+","+xyzInt[j][3]+","+DapiStats[cellNum][0]+","+DapiStats[cellNum][1]+","+DapiStats[cellNum][2]
                             +","+DapiStats[cellNum][3]);
                     bufferedWriter.newLine();
@@ -305,9 +346,9 @@ public class Shelagh_FISH<T extends RealType<T>> implements Command {
 
     }
 
-    private double[][] findXYpositions(ImagePlus channel,String name, double tolerance) {
+    private double[][] findXYpositions(ImagePlus channel, double tolerance) {
         ImagePlus channelZproject = ZProjector.run(channel, "max");
-        channelZproject.setTitle(name+" Z-project");
+        channelZproject.setTitle("Green" +" Z-project");
         channelZproject.show();
         ImageProcessor ip = channelZproject.getProcessor();
         MaximumFinder maxFinder = new MaximumFinder();
@@ -317,8 +358,8 @@ public class Shelagh_FISH<T extends RealType<T>> implements Command {
         int n = maxima.npoints;
         double[][] xy = new double[n][2];
         for (int i = 0; i < n; i++) {
-            xy[i][0] = (double) x[i];
-            xy[i][1] = (double) y[i];
+            xy[i][0] = x[i];
+            xy[i][1] = y[i];
         }
         return xy;
     }
@@ -328,22 +369,21 @@ public class Shelagh_FISH<T extends RealType<T>> implements Command {
         double[][] zPositions = new double[xyPositions.length][5];
         ImagePlus dapi = DAPI.duplicate();
         dapi.show();
+        ImageProcessor dapiIP = dapi.getProcessor();
+        ImageProcessor channelIP = channel.getProcessor();
         for (int i = 0; i < xyPositions.length; i++) {
             double maxIntensity = 0;
             zPositions[i][0] = xyPositions[i][0];
             zPositions[i][1] = xyPositions[i][1];
             for (int j = 0; j < channel.getNSlices(); j++) {
                 channel.setSlice(j);
-                PointRoi point = new PointRoi(xyPositions[i][0], xyPositions[i][1]);
-                channel.setRoi(point);
-                double intensity = channel.getStatistics().max;
+                double intensity = channelIP.getPixelValue((int)xyPositions[i][0],(int)xyPositions[i][1]);
                 if (intensity > maxIntensity) {
                     maxIntensity = intensity;
                     zPositions[i][2] = j;
                     zPositions[i][3] = maxIntensity;
                     dapi.setSlice(j);
-                    dapi.setRoi(point);
-                    zPositions[i][4] = dapi.getStatistics().max;
+                    zPositions[i][4] = dapiIP.getPixelValue((int)xyPositions[i][0],(int)xyPositions[i][1]);
                 }
 
             }
@@ -359,8 +399,7 @@ public class Shelagh_FISH<T extends RealType<T>> implements Command {
                 + " anisotropy=" + 1.0 + " diam_threshold=" + 12.0 +  " model=" + "cyto2" + " nuclei_channel=" + 0
                 + " cyto_channel=" + 1 + " dimensionmode=" + "2D" + " stitch_threshold=" + -1 + " omni=" + false
                 + " cluster=" + false + " additional_flags="+"" );
-        Roi[] cellOutlines = getROIsfromMask();
-        return cellOutlines;
+        return getROIsfromMask();
     }
 
     private Roi[] getROIsfromMask() {
@@ -397,7 +436,6 @@ public class Shelagh_FISH<T extends RealType<T>> implements Command {
     }
 
     private Roi[][] get3DCellROIs(Roi[] outlines, ImagePlus imp){
-
         imp.show();
         imp.setZ(0);
         IJ.run(imp, "Subtract Background...", "rolling=150 stack");
@@ -446,7 +484,7 @@ public class Shelagh_FISH<T extends RealType<T>> implements Command {
                 double y_spot = xyzCell[i][1];
                 double x_outline = outline[cell].getContourCentroid()[0];
                 double y_outline = outline[cell].getContourCentroid()[1];
-                double[] line = get2Dline(x_spot,y_spot,x_outline,y_outline,100);
+                double[] line = get2Dline(x_spot,y_spot,x_outline,y_outline);
                 System.arraycopy(line,0, output[i],0,4);
                 Line lineScan = new Line(line[0],line[1],line[2],line[3]);
                 double[][] intersects = getIntersects(line, cell3D[cell]);
@@ -511,14 +549,12 @@ public class Shelagh_FISH<T extends RealType<T>> implements Command {
         return positions;
     }
 
-    private double[] get2Dline (double x, double y, double xCell, double yCell, double distance) {
+    private double[] get2Dline(double x, double y, double xCell, double yCell) {
 
         double angle = Math.atan((yCell-y)/(xCell-x));
-        double lineStartY = yCell ;
-        double deltaX = distance*Math.cos(angle);
-        double deltaY = distance*Math.sin(angle);
+        double deltaX = (double) 100 *Math.cos(angle);
+        double deltaY = (double) 100 *Math.sin(angle);
         double lineEndY = yCell + deltaY;
-        double lineStartX = xCell;
         double lineEndX = xCell + deltaX;
 
         if ( (x-xCell) < 0 ){
@@ -528,9 +564,7 @@ public class Shelagh_FISH<T extends RealType<T>> implements Command {
             //}
         }
 
-        double[] output = new double[]{lineStartX,lineStartY,lineEndX,lineEndY};
-
-        return output;
+        return new double[]{xCell, yCell,lineEndX,lineEndY};
     }
 
     private void drawRoi(Roi roi, ImagePlus imp, int zslice, int cell, int xpos, int ypos){

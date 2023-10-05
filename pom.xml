@@ -14,7 +14,7 @@
 
 	<groupId>bio.coil</groupId>
 	<artifactId>Shelagh_FISH</artifactId>
-	<version>1.0.1</version>
+	<version>1.1.0</version>
 
 	<name>Shelagh FISH</name>
 	<description>A project to find the distance of a FISH signal from the edge of the nucleus</description>

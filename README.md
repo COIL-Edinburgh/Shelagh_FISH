@@ -17,7 +17,7 @@ IJ plugins. To install Cellpose to use with ImageJ on a windows computer;
 - Only UseGpu should be ticked
 - You can now use Cellpose through ImageJ
 
-##Method:
+## Method:
 
 The plugin;
 
